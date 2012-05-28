@@ -1,0 +1,5 @@
+*.py?
+*.egg-info
+*.swp
+dist
+build
