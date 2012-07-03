@@ -2,7 +2,7 @@ from ellison import validators
 from copy import copy
 from pymongo.son_manipulator import SONManipulator
 import logging
-import inspect
+import inspect, functools
 
 log = logging.getLogger('ellison')
 
@@ -53,8 +53,8 @@ class DataContextInjector(SONManipulator):
         self._data_context = data_context
         
     def _inject (self,son):
-        for m in [m for n,m in inspect.getmembers(son,predicate=inspect.ismethod) if hasattr(m,'_lazy_loader') and isinstance(m._lazy_loader,LazyLoader)]:
-            m._lazy_loader._data_context = self._data_context
+        if isinstance(son,Document):
+            son.__data_context__ = self._data_context
         return son
         
     def transform_incoming(self, son, collection):
@@ -423,27 +423,15 @@ class DataContext(object):
 class LazyLoadingException(Exception):
     pass
 
-class LazyLoader(object):
-    _data_context = None
-    
-    def __init__(self,method):
-        self._method = method
-        method._lazy_loader = self
-
-    def __call__(self):
-        def wrapper(*args,**kwargs):
-            if not hasattr(self,'_cached'):            
-                if not hasattr(self,'_data_context'):
-                    raise LazyLoadingException('This document is not associated with a data context. Perhaps, it has never been saved.')
-                self._cached = self._method(args[0],self._data_context,**kwargs)
-            return self._cached
-        wrapper._lazy_loader = self
-        return wrapper
-
 def lazy(method):
-    if not hasattr(method,'_lazy_loader'):
-        LazyLoader(method)
-    return method._lazy_loader()
+    @functools.wraps(method)
+    def cache(self,*args,**kwargs):
+        if not hasattr(self,'__lazy__'):
+            self.__lazy__ = {}
+        if method.__name__ not in self.__lazy__:
+            self.__lazy__[method.__name__] = functools.partial(method,self=self,data_context=self.__data_context__)(*args,**kwargs)
+        return self.__lazy__[method.__name__]
+    return cache
     
 class UnitOfWork(object):
     def __init__(self,data_context,**kwargs):

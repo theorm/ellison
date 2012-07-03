@@ -2,13 +2,14 @@ from ellison import *
 from pymongo import *
 import unittest
 from pymongo.son_manipulator import ObjectIdInjector
+from datetime import datetime
 
 _db = Connection().test
 _data_context = DataContext()
 
+_db.add_son_manipulator(ObjectIdInjector())
 _db.add_son_manipulator(ClassInjectorManipulator())
 _db.add_son_manipulator(DataContextInjector(_data_context))
-_db.add_son_manipulator(ObjectIdInjector())
 
 class TestRepository(Repository):
 	collection_name = 'ellison'
@@ -152,6 +153,10 @@ class LazyTestDocument(Document):
     def alike(self,data_context,something_else):
         assert something_else == 1
         return data_context.docs.find_similar(self)
+        
+    @lazy
+    def hash(self,data_context):
+        return datetime.now()
 
 class LazyTestDocumentBuilder(TestDocumentBuilder):
     object_tag = ('_cls','LazyTestDocument')
@@ -168,5 +173,9 @@ class TestLazyLoading(unittest.TestCase):
         self.assertEquals(1,doc.similar().count())
         self.assertEquals(1,doc.alike(something_else=1).count())
 
+        doc1 = _data_context.docs.get_one_by_a('a')
+        doc2 = _data_context.docs.get_one_by_a('a')
+        self.assertNotEquals(doc1.hash(),doc2.hash())
+        
 if __name__ == '__main__':
 	unittest.main()
