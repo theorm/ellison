@@ -1,8 +1,14 @@
 from ellison import *
 from pymongo import *
 import unittest
+from pymongo.son_manipulator import ObjectIdInjector
 
 _db = Connection().test
+_data_context = DataContext()
+
+_db.add_son_manipulator(ClassInjectorManipulator())
+_db.add_son_manipulator(DataContextInjector(_data_context))
+_db.add_son_manipulator(ObjectIdInjector())
 
 class TestRepository(Repository):
 	collection_name = 'ellison'
@@ -54,14 +60,25 @@ class TestRepository(Repository):
 	@query(index=23)
 	def get_wrong_3(self):
 		return 3
-
+		
+	@query()
+	def find_similar(self,other):
+	    if 'a' in other:
+	        return {
+	            'a' : other.get('a'),
+	            '_id' : {
+	                '$ne' : other.get('_id'),
+	            }
+	        }
+	    else:
+	        return None
 		
 class TestDocumentBuilder(Builder):
 	structure = {
 		'a'		: (True,basestring),
 		'b'		: (False,int),
 		'c'		: (True,float,42.0)
-	}
+	}    
 	
 		
 class QueryDecoratorTest(unittest.TestCase):
@@ -125,6 +142,25 @@ class QueryDecoratorTest(unittest.TestCase):
 			self.fail('Should raise an error')
 		except:
 			pass
+
+class LazyTestDocument(Document):
+    @lazy
+    def similar(self,data_context):
+        return data_context.docs.find_similar(self)
+
+class LazyTestDocumentBuilder(TestDocumentBuilder):
+    object_tag = ('_cls','LazyTestDocument')
+
+
+class TestLazyLoading(unittest.TestCase):
+    def setUp(self):
+        _data_context.docs = TestRepository(_db)
+    	for a,b in [('a',1),('a',2),('b',1),('b',2),('b',3),('c',1)]:
+    		_data_context.docs.add(LazyTestDocumentBuilder(a=a,b=b))
+    
+    def test_lazy_loading(self):
+        doc = _data_context.docs.get_one_by_a('a')
+        self.assertEquals(1,doc.similar().count())
 
 if __name__ == '__main__':
 	unittest.main()
