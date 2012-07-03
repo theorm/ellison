@@ -2,7 +2,7 @@ from ellison import validators
 from copy import copy
 from pymongo.son_manipulator import SONManipulator
 import logging
-from inspect import getmembers
+import inspect
 
 log = logging.getLogger('ellison')
 
@@ -53,7 +53,7 @@ class DataContextInjector(SONManipulator):
         self._data_context = data_context
         
     def _inject (self,son):
-        for m in [m for n,m in getmembers(son) if hasattr(m,'_lazy_loader') and isinstance(m._lazy_loader,LazyLoader)]:
+        for m in [m for n,m in inspect.getmembers(son,predicate=inspect.ismethod) if hasattr(m,'_lazy_loader') and isinstance(m._lazy_loader,LazyLoader)]:
             m._lazy_loader._data_context = self._data_context
         return son
         
@@ -435,7 +435,7 @@ class LazyLoader(object):
             if not hasattr(self,'_cached'):            
                 if not hasattr(self,'_data_context'):
                     raise LazyLoadingException('This document is not associated with a data context. Perhaps, it has never been saved.')
-                self._cached = self._method(args[0],self._data_context)
+                self._cached = self._method(args[0],self._data_context,**kwargs)
             return self._cached
         wrapper._lazy_loader = self
         return wrapper
@@ -446,5 +446,11 @@ def lazy(method):
     return method._lazy_loader()
     
 class UnitOfWork(object):
+    def __init__(self,data_context,**kwargs):
+        assert isinstance(data_context,DataContext)
+        self.data_context = data_context
+        for (k,v) in kwargs.items():
+            setattr(self,k,v)
+            
     def execute(self):
         return None
