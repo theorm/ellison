@@ -391,11 +391,9 @@ class Repository(object):
         else:
             doc = obj
         doc['_id'] = self.collection().save(doc,safe=True)
-        # Manipulate the object to turn it into a Document instance.
-        # We could offload it onto pymongo, but it would send an extra
-        # query to the DB which would take more time.
-        return ClassInjectorManipulator().transform_outgoing(doc,None)
-
+        doc = self.collection().database._fix_outgoing(doc,self.collection())
+        return doc
+        
     def update(self, document):
         assert '_id' in document, 'Trying to update a document without "_id"'
         self.collection().save(document,safe=True)
